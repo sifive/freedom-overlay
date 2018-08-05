@@ -1,2 +1,2 @@
 # freedom-overlay
-Contains scripts to add overlay on Freedom-SDK 
+This projects contains scripts that are designed to incorporate various overlay onto Freedom-SDK
