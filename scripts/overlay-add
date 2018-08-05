@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+help() {
+    cat >&2 <<EOF
+$0: Overlay Generator for the SiFive Freedom SDK
+    --help                     Prints this help text.
+    --distfiles=DISTFILES      Looks in the given directory for source files.
+    --prefix=PREFIX            Directory to create overlay.
+EOF
+}
+
+# Command-line argument handling
+unset DISTFILES
+unset PREFIX
+while [[ "$1" != "" ]]
+do
+    case "$1" in
+    --help)          help "$0";                               exit 0;;
+    --distfiles=*)   DISTFILES="$(echo "$1" | cut -d= -f2-)"; shift 1;;
+    --distfiles)     DISTFILES="$2";                          shift 2;;
+    --prefix=*)      PREFIX="$(echo "$1" | cut -d= -f2-)";    shift 1;;
+    --prefix)        PREFIX="$2";                             shift 2;;
+    *) echo "$0: Unknown argument $1" >&2;                    exit 1;;
+    esac
+done
+
+if [[ "$PREFIX" == "" ]]
+then
+    echo "[ERROR] $0: --prefix argument is mandatory" >&2
+    help "$0"
+    exit 1
+fi
+
+if [[ "$DISTFILES" == "" ]]
+then
+    echo "[ERROR] $0: --distfiles argument is mandatory" >&2
+    help "$0"
+    exit 1
+fi
+
+
+if [[ -f "$DISTFILES" ]]
+then
+
+    NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
+    OVERLAYDIR="${PREFIX}/usr/portage"
+
+    if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
+    then
+	echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
+	exit 1
+    fi
+
+    # Untar into machine files directory for now
+    tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
+
+    # Install ipdelivery tarball into distfiles directory
+    find "${OVERLAYDIR}/${NAME}-repo/machine/${NAME}" -name "*.tar.gz" | xargs -I % mv %  "${PREFIX}/usr/portage/distfiles/"
+
+    # Install overlay repo
+    mv "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" "${PREFIX}/etc/portage/repos.conf"
+
+    # Clean up
+    rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
+fi
+
