@@ -8,6 +8,17 @@ AC_CANONICAL_TARGET
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_MAINTAINER_MODE([enable])
 
+AC_ARG_WITH([prefix],
+	[AS_HELP_STRING([--with-prefix=PATH], [The full path to Freedom SDK installation])],
+	[],
+	[with_prefix=no]
+)
+
+AS_IF([test "x$with_prefix" != "xno"],
+	[AC_SUBST([PREFIX], "$with_prefix")],
+	[AC_MSG_FAILURE([--with-prefix is require])]
+)
+
 # Generates the remainder of the build system.
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
