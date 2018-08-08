@@ -43,14 +43,15 @@ then
 	exit 1
     fi
 
-    # Untar into machine files directory for now
+    # Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
     tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
 
-    # Install ipdelivery tarball into distfiles directory
-    find "${OVERLAYDIR}/${NAME}-repo/machine/${NAME}" -name "*.tar.gz" | xargs -I % mv %  "PREFIX/usr/portage/distfiles/"
+    # Ugly, but need to setup the correct absolute path in the overlay files
+    cat "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent" | sed 's:TMP2TAG:TMP1TAG:g' > "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp"
+    mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
 
     # Install overlay repo
-    mv "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" "PREFIX/etc/portage/repos.conf"
+    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "PREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 
     # Clean up
     rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
