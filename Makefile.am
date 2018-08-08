@@ -4,7 +4,7 @@
 bin_SCRIPTS = overlay-add
 
 overlay-add: scripts/overlay-add
-	cat $< | sed 's:PREFIX:@PREFIX@:g' > $@
+	cat $< | sed 's:EPREFIX:@EPREFIX@:g' | sed 's:TMP1TAG:@EPREFIX@:g' | sed 's:TMP2TAG:EPREFIX:g' > $@
 	chmod +x $@
 
 EXTRA_DIST = scripts/overlay-add
