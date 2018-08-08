@@ -35,7 +35,7 @@ if [[ -f "$DISTFILES" ]]
 then
 
     NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
-    OVERLAYDIR="PREFIX/usr/portage"
+    OVERLAYDIR="EPREFIX/usr/portage"
 
     if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
     then
@@ -51,7 +51,7 @@ then
     mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
 
     # Install overlay repo
-    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "PREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
+    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 
     # Clean up
     rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
