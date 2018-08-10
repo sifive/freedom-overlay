@@ -1,4 +1,6 @@
-# freedom-overlay
-This projects contains scripts that are designed to incorporate various overlay onto Freedom-SDK
+# freedom-sdk-utils
+This projects contains utility scripts that are designed to aid various tasks within Freedom-SDK.
 
-  ./overlay-add --distfiles=[fullpath overlay.tar.gz]
+## Utility:
+
+  ./fsdk-add-overlay --distfiles=[fullpath overlay.tar.gz]

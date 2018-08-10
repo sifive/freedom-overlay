@@ -1,5 +1,5 @@
 # The name, version, and maintainer of this package
-AC_INIT([freedom-overlay], [m4_esyscmd_s([./scripts/git-version])], [bsou@sifive.com])
+AC_INIT([freedom-sdk-utils], [m4_esyscmd_s([./scripts/git-version])], [bsou@sifive.com])
 
 AC_CANONICAL_TARGET
 
