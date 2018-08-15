@@ -30,35 +30,37 @@ then
     exit 1
 fi
 
-
-if [[ -f "$DISTFILES" ]]
+if [[ ! -f "$DISTFILES" ]]
 then
-
-    NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
-    OVERLAYDIR="EPREFIX/usr/portage"
-
-    if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
-    then
-	echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
-	exit 1
-    fi
-
-    # Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
-    tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
-
-    # Ugly, but need to setup the correct absolute path in the overlay files
-    cat "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent" | sed 's:TMP2TAG:TMP1TAG:g' > "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp"
-    mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
-
-    # Install overlay repo
-    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
-    # add over profile to etc/portage/make.profile/parent
-    echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
-
-    # Force update of IUSE TARGET
-    rm -rf "EPREFIX/var/cache/edb/dep/EPREFIX/usr/portage/freedom-sdk"
-
-    # Clean up
-    rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
+    echo "[ERROR] $0: $DISTFILES must be a file" >&2
+    help "$0"
+    exit 1
 fi
 
+# Find the overlay's name.
+NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
+OVERLAYDIR="EPREFIX/usr/portage"
+
+if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
+then
+    echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
+    exit 1
+fi
+
+# Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
+tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
+
+# Ugly, but need to setup the correct absolute path in the overlay files
+cat "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent" | sed 's:TMP2TAG:TMP1TAG:g' > "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp"
+mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
+
+# Install overlay repo
+cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
+# add over profile to etc/portage/make.profile/parent
+echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
+
+# Force update of IUSE TARGET
+rm -rf "EPREFIX/var/cache/edb/dep/EPREFIX/usr/portage/freedom-sdk"
+
+# Clean up
+rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
