@@ -7,7 +7,7 @@ help() {
     cat >&2 <<EOF
 $0: Overlay Generator for the SiFive Freedom SDK
     --help                     Prints this help text.
-    --distfiles=DISTFILES      Looks in the given directory for source files.
+    --overlay-tgz=*.tar.gz     The path to the overlay tarball that will be added.
 EOF
 }
 
@@ -16,16 +16,16 @@ unset DISTFILES
 while [[ "$1" != "" ]]
 do
     case "$1" in
-    --help)          help "$0";                               exit 0;;
-    --distfiles=*)   DISTFILES="$(echo "$1" | cut -d= -f2-)"; shift 1;;
-    --distfiles)     DISTFILES="$2";                          shift 2;;
+    --help)            help "$0";                               exit 0;;
+    --overlay-tgz=*)   DISTFILES="$(echo "$1" | cut -d= -f2-)"; shift 1;;
+    --overlay-tgz)     DISTFILES="$2";                          shift 2;;
     *) echo "$0: Unknown argument $1" >&2;                    exit 1;;
     esac
 done
 
 if [[ "$DISTFILES" == "" ]]
 then
-    echo "[ERROR] $0: --distfiles argument is mandatory" >&2
+    echo "[ERROR] $0: --overlay-tgz argument is mandatory" >&2
     help "$0"
     exit 1
 fi
