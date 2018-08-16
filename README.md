@@ -3,4 +3,4 @@ This projects contains utility scripts that are designed to aid various tasks wi
 
 ## Utility:
 
-  ./fsdk-add-overlay --distfiles=[fullpath overlay.tar.gz]
+  ./fsdk-add-overlay --overlay-tgz=[fullpath overlay.tar.gz]
