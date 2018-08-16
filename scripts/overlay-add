@@ -7,7 +7,7 @@ help() {
     cat >&2 <<EOF
 $0: Overlay Generator for the SiFive Freedom SDK
     --help                     Prints this help text.
-    --distfiles=DISTFILES      Looks in the given directory for source files.
+    --overlay-tgz=*.tar.gz     The path to the overlay tarball that will be added.
 EOF
 }
 
@@ -16,49 +16,51 @@ unset DISTFILES
 while [[ "$1" != "" ]]
 do
     case "$1" in
-    --help)          help "$0";                               exit 0;;
-    --distfiles=*)   DISTFILES="$(echo "$1" | cut -d= -f2-)"; shift 1;;
-    --distfiles)     DISTFILES="$2";                          shift 2;;
+    --help)            help "$0";                               exit 0;;
+    --overlay-tgz=*)   DISTFILES="$(echo "$1" | cut -d= -f2-)"; shift 1;;
+    --overlay-tgz)     DISTFILES="$2";                          shift 2;;
     *) echo "$0: Unknown argument $1" >&2;                    exit 1;;
     esac
 done
 
 if [[ "$DISTFILES" == "" ]]
 then
-    echo "[ERROR] $0: --distfiles argument is mandatory" >&2
+    echo "[ERROR] $0: --overlay-tgz argument is mandatory" >&2
     help "$0"
     exit 1
 fi
 
-
-if [[ -f "$DISTFILES" ]]
+if [[ ! -f "$DISTFILES" ]]
 then
-
-    NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
-    OVERLAYDIR="EPREFIX/usr/portage"
-
-    if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
-    then
-	echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
-	exit 1
-    fi
-
-    # Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
-    tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
-
-    # Ugly, but need to setup the correct absolute path in the overlay files
-    cat "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent" | sed 's:TMP2TAG:TMP1TAG:g' > "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp"
-    mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
-
-    # Install overlay repo
-    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
-    # add over profile to etc/portage/make.profile/parent
-    echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
-
-    # Force update of IUSE TARGET
-    rm -rf "EPREFIX/var/cache/edb/dep/EPREFIX/usr/portage/freedom-sdk"
-
-    # Clean up
-    rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
+    echo "[ERROR] $0: $DISTFILES must be a file" >&2
+    help "$0"
+    exit 1
 fi
 
+# Find the overlay's name.
+NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
+OVERLAYDIR="EPREFIX/usr/portage"
+
+if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
+then
+    echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
+    exit 1
+fi
+
+# Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
+tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
+
+# Ugly, but need to setup the correct absolute path in the overlay files
+cat "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent" | sed 's:TMP2TAG:TMP1TAG:g' > "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp"
+mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
+
+# Install overlay repo
+cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
+# add over profile to etc/portage/make.profile/parent
+echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
+
+# Force update of IUSE TARGET
+rm -rf "EPREFIX/var/cache/edb/"*
+
+# Clean up
+rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
