@@ -60,7 +60,7 @@ cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 
 echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
 
 # Force update of IUSE TARGET
-rm -rf "EPREFIX/var/cache/edb/dep/EPREFIX/usr/portage/freedom-sdk"
+rm -rf "EPREFIX/var/cache/edb/"*
 
 # Clean up
 rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
