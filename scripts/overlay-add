@@ -50,10 +50,6 @@ fi
 # Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
 tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
 
-# Ugly, but need to setup the correct absolute path in the overlay files
-cat "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent" | sed 's:TMP2TAG:TMP1TAG:g' > "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp"
-mv "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/tmp" "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo/parent"
-
 # Install overlay repo
 cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 # add over profile to etc/portage/make.profile/parent
