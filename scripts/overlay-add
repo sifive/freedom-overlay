@@ -7,56 +7,96 @@ help() {
     cat >&2 <<EOF
 $0: Overlay Generator for the SiFive Freedom SDK
     --help                     Prints this help text.
+    --overlay-name             Specify overlay name.
+    --overlay-dts=*.dts        The path to the overlay device tree that will be added.
     --overlay-tgz=*.tar.gz     The path to the overlay tarball that will be added.
 EOF
 }
 
 # Command-line argument handling
-unset DISTFILES
+unset DTSFILE
+unset OVERLAYFILE
+unset OVERLAYNAME
 while [[ "$1" != "" ]]
 do
     case "$1" in
-    --help)            help "$0";                               exit 0;;
-    --overlay-tgz=*)   DISTFILES="$(echo "$1" | cut -d= -f2-)"; shift 1;;
-    --overlay-tgz)     DISTFILES="$2";                          shift 2;;
-    *) echo "$0: Unknown argument $1" >&2;                    exit 1;;
+    --help)            help "$0";                                 exit 0;;
+    --overlay-name=*)  OVERLAYNAME="$(echo "$1" | cut -d= -f2-)";     shift 1;;
+    --overlay-name)    OVERLAYNAME="$2";                              shift 2;;
+    --overlay-dts=*)   DTSFILE="$(echo "$1" | cut -d= -f2-)";     shift 1;;
+    --overlay-dts)     DTSFILE="$2";                              shift 2;;
+    --overlay-tgz=*)   OVERLAYFILE="$(echo "$1" | cut -d= -f2-)"; shift 1;;
+    --overlay-tgz)     OVERLAYFILE="$2";                          shift 2;;
+    *) echo "$0: Unknown argument $1" >&2;                        exit 1;;
     esac
 done
 
-if [[ "$DISTFILES" == "" ]]
+if [[ "$DTSFILE" == "" && "$OVERLAYFILE" == "" ]]
 then
-    echo "[ERROR] $0: --overlay-tgz argument is mandatory" >&2
+    echo "[ERROR] $0: Must specify either --overlay-dts or --overlay-tgz argument" >&2
     help "$0"
     exit 1
 fi
 
-if [[ ! -f "$DISTFILES" ]]
-then
-    echo "[ERROR] $0: $DISTFILES must be a file" >&2
-    help "$0"
-    exit 1
-fi
-
-# Find the overlay's name.
-NAME="$(basename "${DISTFILES}" | cut -d. -f1)"
+# Set up the overlay base directory
 OVERLAYDIR="EPREFIX/usr/portage"
 
-if [[ "$(tar -tvf "${DISTFILES}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
+if [[ "$DTSFILE" != "" ]]
 then
-    echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
-    exit 1
+    if [[ ! -f "$DTSFILE" ]]
+    then
+	echo "[ERROR] $0: $DTSFILE must be a file" >&2
+	help "$0"
+	exit 1
+    fi
+    if [[ "$OVERLAYNAME" == "" ]]
+    then
+	echo "[ERROR] $0: --overlay-name is mandatory" >&2
+	help "$0"
+	exit 1
+    fi
+    NAME="$OVERLAYNAME"
+
+    fsdk-generate-overlay --pkgdir="EPREFIX" --ipdevicetree="$DTSFILE" --overlayname="${NAME}"
+    # Install overlay repo
+    cat "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1"
+    mv "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1" "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 fi
 
-# Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
-tar -xvf "${DISTFILES}" -C "${OVERLAYDIR}" --strip 2
+if [[ "$OVERLAYFILE" != "" ]]
+then
+    if [[ ! -f "$OVERLAYFILE" ]]
+    then
+	echo "[ERROR] $0: $OVERLAYFILE must be a file" >&2
+	help "$0"
+	exit 1
+    fi
+    if [[ "$OVERLAYNAME" == "" ]]
+    then
+	# Find the overlay's name.
+	NAME="$(basename "${OVERLAYFILE}" | cut -d. -f1)"
+	echo "[INFO] $0: --overlay-name not given, default to ${NAME}" >&2
+    else
+	NAME="$OVERLAYNAME"	
+    fi
+    if [[ "$(tar -tvf "${OVERLAYFILE}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
+    then
+	echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
+	exit 1
+    fi
 
-# Install overlay repo
-cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
+    # Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
+    tar -xvf "${OVERLAYFILE}" -C "${OVERLAYDIR}" --strip 2
+
+    # Install overlay repo
+    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
+
+    # Clean up
+    rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
+fi
+
 # add over profile to etc/portage/make.profile/parent
 echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
 
 # Force update of IUSE TARGET
 rm -rf "EPREFIX/var/cache/edb/"*
-
-# Clean up
-rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"

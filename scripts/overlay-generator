@@ -1,0 +1,247 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+help() {
+    cat >&2 <<EOF
+$0: Overlay Generator for the SiFive Freedom SDK
+    --help                     Prints this help text.
+    --pkgdir=PKGDIR            Output package directory.
+    --ipdelivery=IPDELIVERY    Path to Ipdelivery tarball file.
+    --ipdevicetree=IPDTS       Path to IP Devicetree file.
+    --overlayname              Specify overlay name.
+EOF
+}
+
+# Command-line argument handling
+unset OVERLAYNAME
+unset PKGDIR
+unset IPDELIVERY
+unset IPDTS
+while [[ "$1" != "" ]]
+do
+    case "$1" in
+    --help)          help "$0";                               exit 0;;
+    --pkgdir=*)      PKGDIR="$(echo "$1" | cut -d= -f2-)";    shift 1;;
+    --pkgdir)        PKGDIR="$2";                             shift 2;;
+    --ipdelivery=*)  IPDELIVERY="$(echo "$1" | cut -d= -f2-)"; shift 1;;
+    --ipdelivery)    IPDELIVERY="$2";                          shift 2;;
+    --ipdevicetree=*) IPDTS="$(echo "$1" | cut -d= -f2-)";    shift 1;;
+    --ipdevicetree)   IPDTS="$2";                             shift 2;;
+    --overlayname=*) OVERLAYNAME="$(echo "$1" | cut -d= -f2-)";      shift 1;;
+    --overlayname)   OVERLAYNAME="$2";                               shift 2;;
+    --no-rtl)        RTL="no";                                shift 1;;
+    *) echo "$0: Unknown argument $1" >&2;                    exit 1;;
+    esac
+done
+
+if [[ "OVERLAYNAME" == "" ]]
+then
+    echo "[ERROR] $0: --overlayname argument is mandatory" >&2
+    help "$0"
+    exit 1
+fi
+
+if [[ "$PKGDIR" == "" && ! -d "$PKGDIR" ]]
+then
+    echo "[ERROR] $0: --pkgdir argument is mandatory and must exist" >&2
+    help "$0"
+    exit 1
+fi
+
+if [[ "$IPDTS" == "" && "$IPDELIVERY" == "" ]]
+then
+    echo "[ERROR] $0: Must specify either --ipdevicetree or --ipdelivery argument" >&2
+    help "$0"
+    exit 1
+fi
+
+OVERLAYDIR="${PKGDIR}/usr/portage/${OVERLAYNAME}-repo"
+mkdir -p "${OVERLAYDIR}/machine/${OVERLAYNAME}/files"
+mkdir -p "${OVERLAYDIR}/metadata"
+mkdir -p "${OVERLAYDIR}/profiles"
+
+# Notify this overlay is not a master
+cat >"${OVERLAYDIR}/metadata/layout.conf" <<EOF
+masters = freedom-sdk
+thin-manifests = true
+EOF
+
+# Prepare the overlay profiles
+mkdir -p "${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo"
+
+# Define the overlay EAPI level
+cat >"${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo/eapi" <<EOF
+6
+EOF
+
+# Define the overlay repo name for emerge to reference
+cat >"${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo/make.defaults" <<EOF
+USE_EXPAND_VALUES_TARGET="\${USE_EXPAND_VALUES_TARGET} ${OVERLAYNAME}"
+
+TARGET="\${TARGET} ${OVERLAYNAME}"
+
+ALL_TARGETS_USE_DEPEND="\${ALL_TARGETS_USE_DEPEND} target_${OVERLAYNAME}? ( machine/${OVERLAYNAME}[dtb] )"
+EOF
+
+# Define the overlay depend package for portage to reference
+cat >"${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo/packages" <<EOF
+EOF
+
+# Define the overlay repo name for emerge to reference
+cat >"${OVERLAYDIR}/profiles/repo_name" <<EOF
+${OVERLAYNAME}-repo
+EOF
+
+# Define the overlay depend categories
+cat >"${OVERLAYDIR}/profiles/categories" <<EOF
+EOF
+
+if [[ "$IPDTS" != "" ]]
+then
+
+    if [[ ! -f "$IPDTS" ]]
+    then
+	echo "[ERROR] $0: $IPDTS must be a file" >&2
+	help "$0"
+	exit 1
+    fi
+
+    # Save ipdevicetree file into overlay installation
+    cp "${IPDTS}" "${OVERLAYDIR}/machine/${OVERLAYNAME}/files/${OVERLAYNAME}.dts"
+
+    # Create a overlay ebuild
+cat >"${OVERLAYDIR}/machine/${OVERLAYNAME}/${OVERLAYNAME}-0.ebuild" <<EOF
+# Copyright 2018 SiFive, Inc
+# SPDX-License-Identifier: Apache-2.0
+
+EAPI=6
+
+inherit eutils binary-package sifive
+
+DESCRIPTION="${OVERLAYNAME} Design Overlay for Freedom-SDK"
+HOMEPAGE="https://www.sifive.com"
+SRC_URI=""
+S="\${WORKDIR}/${OVERLAYNAME}"
+
+DEPEND="
+    host-util/coreutils
+    host-util/gzip
+    host-util/tar
+    dtb? ( host-util/dtc )
+"
+RDEPEND=""
+
+LICENSE="GPL-2"
+SLOT="0"
+KEYWORDS="2018-7"
+IUSE="+dts +dtb"
+
+src_unpack() {
+    mkdir -p "\${S}"
+    default
+}
+
+src_compile() {
+    sed 's/simple-bus/sifive,periph-port/g' -i "\${FILESDIR}/\${PN}.dts"
+    use dtb && dtc "\${FILESDIR}/\${PN}.dts" -I dts -O dtb -o "\${PN}.dtb" || die "Unable to compile \${PN}.dts"
+    default
+}
+
+src_install() {
+    mkdir -p "\${ED}/usr/share/device-trees/"
+    use dts && cp "\${FILESDIR}/\${PN}.dts" "\${ED}/usr/share/device-trees/\${PN}.dts" || die "\${PN}.dts not found"
+    use dtb && cp "\${PN}.dtb" "\${ED}/usr/share/device-trees/\${PN}.dtb" || die "\${PN}.dtb not found"
+    binary_package_src_install
+}
+EOF
+
+    # Define the overlay repo name for emerge to reference
+    cat >"${PKGDIR}/etc/portage/repos.conf/${OVERLAYNAME}-repo.conf" <<EOF
+[${OVERLAYNAME}-repo]
+location = EPREFIX/usr/portage/${OVERLAYNAME}-repo
+masters = freedom-sdk
+auto-sync = false
+EOF
+
+fi
+
+if [[ "$IPDELIVERY" != "" ]]
+then
+
+    if [[ ! -f "$IPDELIVERY" ]]
+    then
+	echo "[ERROR] $0: $IPDELIVERY must be a file" >&2
+	help "$0"
+	exit 1
+    fi
+
+    RTL="yes"
+
+    mkdir -p "${OVERLAYDIR}/etc/portage/repos.conf"
+    # Save ipdelivery tar in overlay files dir, overlay installation will unpack
+    cp "${IPDELIVERY}" "${OVERLAYDIR}/machine/${OVERLAYNAME}/files"
+
+# Create a overlay ebuild
+cat >"${OVERLAYDIR}/machine/${OVERLAYNAME}/${OVERLAYNAME}-0.ebuild" <<EOF
+# Copyright 2018 SiFive, Inc
+# SPDX-License-Identifier: Apache-2.0
+
+EAPI=6
+
+inherit eutils binary-package sifive
+
+DESCRIPTION="${OVERLAYNAME} Design Overlay for Freedom-SDK"
+HOMEPAGE="https://www.sifive.com"
+SRC_URI=""
+S="\${WORKDIR}/${OVERLAYNAME}"
+
+DEPEND="
+    host-util/coreutils
+    host-util/gzip
+    host-util/tar
+    dtb? ( host-util/dtc )
+"
+RDEPEND=""
+
+LICENSE="GPL-2"
+SLOT="0"
+KEYWORDS="2018-7"
+IUSE="+dts +dtb"
+
+src_unpack() {
+    mkdir -p "\${S}"
+    unpack "\${FILESDIR}/\${PN}.tar.gz"
+    default
+}
+
+src_compile() {
+    sed 's/simple-bus/sifive,periph-port/g' -i info/design.dts
+    use dtb && dtc "info/design.dts" -I dts -O dtb -o "\${PN}.dtb" || die "Unable to compile info/design.dts"
+    mv Makefile Makefile.vcs
+    default
+}
+
+src_install() {
+    mkdir -p "\${ED}/usr/share/device-trees/"
+    use dts && cp "info/design.dts" "\${ED}/usr/share/device-trees/\${PN}.dts" || die "\${PN}.dts not found"
+    use dtb && cp "\${PN}.dtb" "\${ED}/usr/share/device-trees/\${PN}.dtb" || die "\${PN}.dtb not found"
+    binary_package_src_install
+}
+EOF
+
+    # Define the overlay repo name for emerge to reference
+    cat >"${OVERLAYDIR}/etc/portage/repos.conf/${OVERLAYNAME}-repo.conf" <<EOF
+[${OVERLAYNAME}-repo]
+location = EPREFIX/usr/portage/${OVERLAYNAME}-repo
+masters = freedom-sdk
+auto-sync = false
+EOF
+
+    # Creating design overlay for SDK and save to same place as tarball
+    tar --create --gzip --file="${OVERLAYNAME}.tar.gz" -C "${PKGDIR}" usr
+
+    # Cleanup
+    rm -rf "${PKGDIR}/usr"
+fi
