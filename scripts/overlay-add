@@ -9,13 +9,13 @@ $0: Overlay Generator for the SiFive Freedom SDK
     --help                     Prints this help text.
     --overlay-name             Specify overlay name.
     --overlay-dts=*.dts        The path to the overlay device tree that will be added.
-    --overlay-tgz=*.tar.gz     The path to the overlay tarball that will be added.
+    --overlay-tgz=*.tar.gz     The path to the overlay ipdelivery that will be added.
 EOF
 }
 
 # Command-line argument handling
 unset DTSFILE
-unset OVERLAYFILE
+unset IPDELIVERYFILE
 unset OVERLAYNAME
 while [[ "$1" != "" ]]
 do
@@ -25,13 +25,13 @@ do
     --overlay-name)    OVERLAYNAME="$2";                              shift 2;;
     --overlay-dts=*)   DTSFILE="$(echo "$1" | cut -d= -f2-)";     shift 1;;
     --overlay-dts)     DTSFILE="$2";                              shift 2;;
-    --overlay-tgz=*)   OVERLAYFILE="$(echo "$1" | cut -d= -f2-)"; shift 1;;
-    --overlay-tgz)     OVERLAYFILE="$2";                          shift 2;;
+    --overlay-tgz=*)   IPDELIVERYFILE="$(echo "$1" | cut -d= -f2-)"; shift 1;;
+    --overlay-tgz)     IPDELIVERYFILE="$2";                          shift 2;;
     *) echo "$0: Unknown argument $1" >&2;                        exit 1;;
     esac
 done
 
-if [[ "$DTSFILE" == "" && "$OVERLAYFILE" == "" ]]
+if [[ "$DTSFILE" == "" && "$IPDELIVERYFILE" == "" ]]
 then
     echo "[ERROR] $0: Must specify either --overlay-dts or --overlay-tgz argument" >&2
     help "$0"
@@ -43,9 +43,9 @@ OVERLAYDIR="EPREFIX/usr/portage"
 
 if [[ "$DTSFILE" != "" ]]
 then
-    if [[ ! -f "$DTSFILE" ]]
+    if [[ ! -f "$DTSFILE" &&  "$DTSFILE" != "*.dts" ]]
     then
-	echo "[ERROR] $0: $DTSFILE must be a file" >&2
+	echo "[ERROR] $0: $DTSFILE must be a dts file" >&2
 	help "$0"
 	exit 1
     fi
@@ -58,42 +58,25 @@ then
     NAME="$OVERLAYNAME"
 
     fsdk-generate-overlay --pkgdir="EPREFIX" --ipdevicetree="$DTSFILE" --overlayname="${NAME}"
-    # Install overlay repo
-    cat "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1"
-    mv "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1" "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 fi
 
-if [[ "$OVERLAYFILE" != "" ]]
+if [[ "$IPDELIVERYFILE" != "" ]]
 then
-    if [[ ! -f "$OVERLAYFILE" ]]
+    if [[ ! -f "$IPDELIVERYFILE" ]]
     then
-	echo "[ERROR] $0: $OVERLAYFILE must be a file" >&2
+	echo "[ERROR] $0: $IPDELIVERYFILE must be a file" >&2
 	help "$0"
 	exit 1
     fi
-    if [[ "$OVERLAYNAME" == "" ]]
-    then
-	# Find the overlay's name.
-	NAME="$(basename "${OVERLAYFILE}" | cut -d. -f1)"
-	echo "[INFO] $0: --overlay-name not given, default to ${NAME}" >&2
-    else
-	NAME="$OVERLAYNAME"	
-    fi
-    if [[ "$(tar -tvf "${OVERLAYFILE}" | grep "/${NAME}-repo/" | wc -l)" == 0 ]]
-    then
-	echo "[ERROR] $0: No machine $NAME-repo found in $DISTFILE" >&2
-	exit 1
-    fi
+    # Get the overlay's name from the ipdelivery filename.
+    NAME="$(basename "${IPDELIVERYFILE}" | cut -d. -f1)"
 
-    # Untar into usr/portage as new overlay. Strip 2 to remove the orignal usr/portage
-    tar -xvf "${OVERLAYFILE}" -C "${OVERLAYDIR}" --strip 2
-
-    # Install overlay repo
-    cat "${OVERLAYDIR}/${NAME}-repo/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
-
-    # Clean up
-    rm -rf "${OVERLAYDIR}/${NAME}-repo/etc"
+    fsdk-generate-overlay --pkgdir="EPREFIX" --ipdelivery="$IPDELIVERYFILE" --overlayname="${NAME}"
 fi
+
+# Install overlay repo
+cat "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1"
+mv "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1" "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 
 # add over profile to etc/portage/make.profile/parent
 echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"

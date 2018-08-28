@@ -98,6 +98,14 @@ EOF
 cat >"${OVERLAYDIR}/profiles/categories" <<EOF
 EOF
 
+# Define the overlay repo name for emerge to reference
+cat >"${PKGDIR}/etc/portage/repos.conf/${OVERLAYNAME}-repo.conf" <<EOF
+[${OVERLAYNAME}-repo]
+location = EPREFIX/usr/portage/${OVERLAYNAME}-repo
+masters = freedom-sdk
+auto-sync = false
+EOF
+
 if [[ "$IPDTS" != "" ]]
 then
 
@@ -112,7 +120,7 @@ then
     cp "${IPDTS}" "${OVERLAYDIR}/machine/${OVERLAYNAME}/files/${OVERLAYNAME}.dts"
 
     # Create a overlay ebuild
-cat >"${OVERLAYDIR}/machine/${OVERLAYNAME}/${OVERLAYNAME}-0.ebuild" <<EOF
+    cat >"${OVERLAYDIR}/machine/${OVERLAYNAME}/${OVERLAYNAME}-0.ebuild" <<EOF
 # Copyright 2018 SiFive, Inc
 # SPDX-License-Identifier: Apache-2.0
 
@@ -179,7 +187,6 @@ then
 
     RTL="yes"
 
-    mkdir -p "${OVERLAYDIR}/etc/portage/repos.conf"
     # Save ipdelivery tar in overlay files dir, overlay installation will unpack
     cp "${IPDELIVERY}" "${OVERLAYDIR}/machine/${OVERLAYNAME}/files"
 
@@ -224,6 +231,11 @@ src_compile() {
 }
 
 src_install() {
+    if test "\${VCS_HOME}" != ""
+    then
+        mkdir -p "\${ED}/usr/share/verilog/\${PN}/"
+        cp -r "." "\${ED}/usr/share/verilog/\${PN}" || die "Unable to cache \${PN} verilog data"
+    fi
     mkdir -p "\${ED}/usr/share/device-trees/"
     use dts && cp "info/design.dts" "\${ED}/usr/share/device-trees/\${PN}.dts" || die "\${PN}.dts not found"
     use dtb && cp "\${PN}.dtb" "\${ED}/usr/share/device-trees/\${PN}.dtb" || die "\${PN}.dtb not found"
@@ -231,17 +243,4 @@ src_install() {
 }
 EOF
 
-    # Define the overlay repo name for emerge to reference
-    cat >"${OVERLAYDIR}/etc/portage/repos.conf/${OVERLAYNAME}-repo.conf" <<EOF
-[${OVERLAYNAME}-repo]
-location = EPREFIX/usr/portage/${OVERLAYNAME}-repo
-masters = freedom-sdk
-auto-sync = false
-EOF
-
-    # Creating design overlay for SDK and save to same place as tarball
-    tar --create --gzip --file="${OVERLAYNAME}.tar.gz" -C "${PKGDIR}" usr
-
-    # Cleanup
-    rm -rf "${PKGDIR}/usr"
 fi
