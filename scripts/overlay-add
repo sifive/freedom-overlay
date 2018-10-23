@@ -10,6 +10,7 @@ $0: Overlay Generator for the SiFive Freedom SDK
     --overlay-name             Specify overlay name.
     --overlay-dts=*.dts        The path to the overlay device tree that will be added.
     --overlay-tgz=*.tar.gz     The path to the overlay ipdelivery that will be added.
+    --overlay-git=*.tar.gz     The path to the overlay git repository that will be added.
 EOF
 }
 
@@ -27,13 +28,15 @@ do
     --overlay-dts)     DTSFILE="$2";                              shift 2;;
     --overlay-tgz=*)   IPDELIVERYFILE="$(echo "$1" | cut -d= -f2-)"; shift 1;;
     --overlay-tgz)     IPDELIVERYFILE="$2";                          shift 2;;
+    --overlay-git=*)   GITREPO="$(echo "$1" | cut -d= -f2-)";        shift 1;;
+    --overlay-git)     GITREPO="$2";                                 shift 2;;
     *) echo "$0: Unknown argument $1" >&2;                        exit 1;;
     esac
 done
 
-if [[ "$DTSFILE" == "" && "$IPDELIVERYFILE" == "" ]]
+if [[ "$DTSFILE" == "" && "$IPDELIVERYFILE" == "" && "$GITREPO" == "" ]]
 then
-    echo "[ERROR] $0: Must specify either --overlay-dts or --overlay-tgz argument" >&2
+    echo "[ERROR] $0: Must specify either --overlay-dts, --overlay-tgz, or --overlay-git argument" >&2
     help "$0"
     exit 1
 fi
@@ -74,12 +77,38 @@ then
     fsdk-generate-overlay --pkgdir="EPREFIX" --ipdelivery="$IPDELIVERYFILE" --overlayname="${NAME}"
 fi
 
-# Install overlay repo
-cat "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1"
-mv "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1" "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
+if [[ "$GITREPO" == "" ]]
+then
+    # Create a configuration file that points to this overlay.
+    cat "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf" | sed 's:TMP2TAG:TMP1TAG:g' > "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1"
+    mv "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf1" "EPREFIX/etc/portage/repos.conf/${NAME}-repo.conf"
 
-# add over profile to etc/portage/make.profile/parent
-echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
+else
+    NAME="${OVERLAYNAME}"
+
+    # Create a configuration file that informs portage that the new repository
+    # should be synchronized from a git repository.
+    cat > "EPREFIX/etc/portage/repos.conf/${NAME}.conf" << EOF
+[${NAME}]
+location = EPREFIX/usr/portage/${NAME}
+sync-type = git
+sync-uri = ${GITREPO}
+EOF
+
+    # Now that the overlay has been created it is possible to sync it, so just
+    # go ahead and do so.
+    emaint sync -r "${NAME}"
+fi
+
+# add over profile to etc/portage/make.profile/parent if one exists
+if test -d "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo"
+then
+    echo "${OVERLAYDIR}/${NAME}-repo/profiles/${NAME}-repo" >> "EPREFIX/etc/portage/make.profile/parent"
+fi
+if test -d "${OVERLAYDIR}/${NAME}/profiles/${NAME}"
+then
+    echo "${OVERLAYDIR}/${NAME}/profiles/${NAME}" >> "EPREFIX/etc/portage/make.profile/parent"
+fi
 
 # Force update of IUSE TARGET
 rm -rf "EPREFIX/var/cache/edb/"*
