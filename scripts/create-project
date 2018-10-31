@@ -1,0 +1,192 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+help() {
+    cat >&2 <<EOF
+$0: Create a software project direcrory for an overlay SiFive Freedom SDK
+    --help                     Prints this help text.
+    --project-path             Specify project path for an overlay.
+    --project-name             Specify project name for an overlay.
+    --overlay-name             Specify overlay name installed.
+    --overlay-dts=*.dts        The absolute path to the overlay device tree file added.
+EOF
+}
+
+# Command-line argument handling
+unset DTSFILE
+unset OVERLAYNAME
+unset PROJECTPATH
+unset PROJECTNAME
+while [[ "$1" != "" ]]
+do
+    case "$1" in
+    --help)            help "$0";                                 exit 0;;
+    --project-path=*)  PROJECTPATH="$(echo "$1" | cut -d= -f2-)";     shift 1;;
+    --project-path)    PROJECTPATH="$2";                              shift 2;;
+    --project-name=*)  PROJECTNAME="$(echo "$1" | cut -d= -f2-)";     shift 1;;
+    --project-name)    PROJECTNAME="$2";                              shift 2;;
+    --overlay-name=*)  OVERLAYNAME="$(echo "$1" | cut -d= -f2-)";     shift 1;;
+    --overlay-name)    OVERLAYNAME="$2";                              shift 2;;
+    --overlay-dts=*)   DTSFILE="$(echo "$1" | cut -d= -f2-)";     shift 1;;
+    --overlay-dts)     DTSFILE="$2";                              shift 2;;
+    *) echo "$0: Unknown argument $1" >&2;                        exit 1;;
+    esac
+done
+
+if [[ "$PROJECTNAME" == ""  ]]
+then
+    echo "[ERROR] $0: Must specify --project-name" >&2
+    help "$0"
+    exit 1
+fi
+
+if [[ "$DTSFILE" == "" && "$OVERLAYNAME" == ""  ]]
+then
+    echo "[ERROR] $0: Must specify either --overlay-name, or --overlay-dts" >&2
+    help "$0"
+    exit 1
+fi
+
+if [[ "$DTSFILE" != "" ]]
+then
+    if [[ ! -f "$DTSFILE" &&  "$DTSFILE" != "*.dts" ]]
+    then
+	echo "[ERROR] $0: $DTSFILE must be a dts file" >&2
+	help "$0"
+	exit 1
+    fi
+    if [[ "$OVERLAYNAME" == "" ]]
+    then
+	dtsfile=$(basename $DTSFILE)
+	OVERLAYNAME="${dtsfile%.dts}"
+	echo "[INFO] $0: --overlay-name not provided, default to use $OVERLAYNAME" >&2
+    fi
+fi
+
+# Set up user project base directory
+PROJECTDIR="$PROJECTPATH"
+if [[ "$PROJECTDIR" == ""  ]]
+then
+    PROJECTDIR="EPREFIX/project"
+fi
+NAME="$PROJECTNAME"
+
+# add a new project workspace if one not already exist
+if test -d "${PROJECTDIR}/${NAME}"
+then
+    echo "[ERROR] $0: Project ${PROJECTDIR}/${NAME} already exist. Delete or Provide a new project name" >&2
+    exit 1
+fi
+
+mkdir -p "${PROJECTDIR}/${NAME}"
+
+# Create a sample Makefile for the project
+cat > "${PROJECTDIR}/${NAME}/Makefile" << EOF
+# Rename "hello" for your own application
+PROGRAM ?= hello
+MACHINE ?= $OVERLAYNAME
+MEE ?= mee
+# Redefine the bit-with per your design.info file
+BITWIDTH ?= 32
+
+# Add additional C or S files as needed
+C_SRCS += src/main.c
+ASM_SRCS+=
+
+LINKER_SCRIPT = \
+        -Tenv/\$(MACHINE).lds
+
+# Add additional header files in include dir as needed
+INCLUDES = \
+        -Iinclude \
+
+DEFINES  = \
+
+# CFLAGS is preset by Freedom SDK for mee environment. It is best to appends additional flags
+CFLAGS   = \
+        \$(INCLUDES) \$(DEFINES) -menv=\$(MEE) -mmachine=\$(MACHINE)
+
+# LDFLAGS is preset by Freedom SDK for mee environment. It is best to appends additional flags
+LDFLAGS  = \
+        -Wl,-Map,\$(PROGRAM).map
+
+GCC     := riscv64-sifive-elf-gcc
+GXX     := riscv64-sifive-elf-g++
+OBJDUMP := riscv64-sifive-elf-objdump
+OBJCPY  := riscv64-sifive-elf-objcopy
+GDB     := riscv64-sifive-elf-gdb
+AR      := riscv64-sifive-elf-ar
+ELF2HEX := riscv64-sifive-elf-elf2hex
+SIZE    := riscv64-sifive-elf-size
+DTC     := dtc
+LDSGEN  := freedom-ldscript-generator
+
+ASM_OBJS := \$(ASM_SRCS:.S=.o)
+C_OBJS := \$(C_SRCS:.c=.o)
+LINK_OBJS := \$(ASM_OBJS) \$(C_OBJS) 
+
+all: \$(PROGRAM).hex
+
+env/\$(MACHINE).dtb: env/\$(MACHINE).dts
+	@echo "    Compiling $<"
+	@\$(DTC)  env/\$(MACHINE).dts -o \$@ -O dtb -I dts
+
+env/\$(MACHINE).lds: env/\$(MACHINE).dtb
+	@echo "    Generating $<"
+	@\$(LDSGEN)  --dtb env/\$(MACHINE).dtb --linker \$@
+
+\$(C_OBJS): %.o: %.c
+	@echo "    CC $<"
+	@\$(GCC) \$(CFLAGS) -c \$(INCLUDES) -o \$@ $< 
+
+\$(ASM_OBJS): %.o: %.S 
+	@echo "    CC $<"
+	@\$(GCC) \$(CFLAGS) -c \$(INCLUDES) -o \$@ $< 
+
+\$(PROGRAM).elf  : \$(ASM_OBJS) \$(C_OBJS)  env/\$(MACHINE).lds
+	@echo Linking....
+	@\$(GCC) \$(CFLAGS) \$(LINKER_SCRIPT) \$(INCLUDES) \$(LINK_OBJS) -o \$@ \$(LDFLAGS)
+	@\$(OBJDUMP) -S \$(PROGRAM).elf > \$(PROGRAM).asm  
+	@\$(SIZE) --format=berkeley \$(PROGRAM).elf
+
+\$(PROGRAM).hex : \$(PROGRAM).elf
+	@echo Bitstreaming....
+	@\$(ELF2HEX) --input \$(PROGRAM).elf --bit-width \${BITWIDTH} --output \$(PROGRAM).hex
+	@rm -fr src/obj
+	@mkdir src/obj
+	@mv \$(PROGRAM).* src/obj/
+	@cp src/obj/\$(PROGRAM).hex src/obj/program.hex
+	@echo Completed \$@
+
+clean :
+	@rm -f \$(C_OBJS) \$(ASM_OBJS) *.map *.elf *.asm
+	@rm -fr src/obj 
+#-------------------------------------------------------------
+EOF
+
+# Create a env dir for depositing dts and sample project linker files
+mkdir -p "${PROJECTDIR}/${NAME}/env"
+if [[ "$DTSFILE" != "" ]]
+then
+    cp "$DTSFILE" "${PROJECTDIR}/${NAME}/env/${OVERLAYNAME}.dts"
+else
+    cp "EPREFIX/usr/share/device-trees/${OVERLAYNAME}.dts" "${PROJECTDIR}/${NAME}/env/"
+fi
+
+# Create a simple sourceme to get into the project workspace
+mkdir -p "${PROJECTDIR}/${NAME}/scripts"
+cat > "${PROJECTDIR}/${NAME}/scripts/sourceme" << EOF
+source EPREFIX/enter.bash
+cd "${PROJECTDIR}/${NAME}"
+EOF
+
+# Create include dir for project
+mkdir -p "${PROJECTDIR}/${NAME}/include"
+cp EPREFIX/examples/hello/sifive-hifive1/src/config.h "${PROJECTDIR}/${NAME}/include/"
+
+# Create a src dir for the project, a sample main.c from example/hello
+mkdir -p "${PROJECTDIR}/${NAME}/src"
+cp EPREFIX/examples/hello/sifive-hifive1/src/src/main.c "${PROJECTDIR}/${NAME}/src/"
+#sed -i 's/#include <config.h>//' "${PROJECTDIR}/${NAME}/src/main.c"

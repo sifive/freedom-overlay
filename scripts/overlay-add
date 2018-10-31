@@ -72,7 +72,14 @@ then
 	exit 1
     fi
     # Get the overlay's name from the ipdelivery filename.
-    NAME="$(basename "${IPDELIVERYFILE}" | cut -d. -f1)"
+    if [[ "$OVERLAYNAME" == "" ]]
+    then
+        echo "[INFO] $0: --overlay-name not given, default to use ipdelivery filename" >&2
+        # Get the overlay's name from the ipdelivery filename.
+        NAME="$(basename "${IPDELIVERYFILE}" | cut -d. -f1)"
+    else
+        NAME="$OVERLAYNAME"
+    fi
 
     fsdk-generate-overlay --pkgdir="EPREFIX" --ipdelivery="$IPDELIVERYFILE" --overlayname="${NAME}"
 fi
