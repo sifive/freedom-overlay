@@ -6,6 +6,7 @@
 /configure
 /fsdk-add-overlay
 /fsdk-generate-overlay
+/fsdk-create-project
 /install-sh
 /missing
 *.swp
