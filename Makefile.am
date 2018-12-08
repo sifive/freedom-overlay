@@ -8,7 +8,7 @@ fsdk-add-overlay: scripts/overlay-add
 	chmod +x $@
 
 fsdk-generate-overlay: scripts/overlay-generator
-	cat $< > $@
+	cat $< | sed 's:EPREFIX:@EPREFIX@:g' > $@
 	chmod +x $@
 
 fsdk-create-project: scripts/create-project
