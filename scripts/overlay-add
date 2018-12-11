@@ -34,12 +34,15 @@ do
     esac
 done
 
+LOG_FSDK="EPREFIX/var/log/fsdk-utils.log"
 if [[ "$DTSFILE" == "" && "$IPDELIVERYFILE" == "" && "$GITREPO" == "" ]]
 then
-    echo "[ERROR] $0: Must specify either --overlay-dts, --overlay-tgz, or --overlay-git argument" >&2
+    echo "[ERROR] $0: Must specify either --overlay-dts, --overlay-tgz, or --overlay-git argument" >&2 |& tee -a $LOG_FSDK
     help "$0"
     exit 1
 fi
+
+echo "[INFO] $0: dts=\"$DTSFILE\" ip=\"$IPDELIVERYFILE\" name=\"$OVERLAYNAME\", see $LOG_FSDK for more details" >&2 |& tee -a $LOG_FSDK
 
 # Set up the overlay base directory
 OVERLAYDIR="EPREFIX/usr/portage"
@@ -48,18 +51,23 @@ if [[ "$DTSFILE" != "" ]]
 then
     if [[ ! -f "$DTSFILE" &&  "$DTSFILE" != "*.dts" ]]
     then
-	echo "[ERROR] $0: $DTSFILE must be a dts file" >&2
+	echo "[ERROR] $0: $DTSFILE must be a dts file" >&2 |& tee -a $LOG_FSDK
 	help "$0"
 	exit 1
     fi
     if [[ "$OVERLAYNAME" == "" ]]
     then
-	echo "[ERROR] $0: --overlay-name is mandatory" >&2
+	echo "[ERROR] $0: --overlay-name is mandatory" >&2 |& tee -a $LOG_FSDK
 	help "$0"
 	exit 1
     fi
     NAME="$OVERLAYNAME"
 
+    if [[ -d "EPREFIX/usr/portage/${NAME}-repo" ]]
+    then
+        echo "[ERROR] $0: overlay-name \"${NAME}\" already exist, use a different name" >&2 |& tee -a $LOG_FSDK
+        exit 1
+    fi
     fsdk-generate-overlay --pkgdir="EPREFIX" --ipdevicetree="$DTSFILE" --overlayname="${NAME}"
 fi
 
@@ -67,20 +75,25 @@ if [[ "$IPDELIVERYFILE" != "" ]]
 then
     if [[ ! -f "$IPDELIVERYFILE" ]]
     then
-	echo "[ERROR] $0: $IPDELIVERYFILE must be a file" >&2
+	echo "[ERROR] $0: $IPDELIVERYFILE must be a file" >&2 |& tee -a $LOG_FSDK
 	help "$0"
 	exit 1
     fi
     # Get the overlay's name from the ipdelivery filename.
     if [[ "$OVERLAYNAME" == "" ]]
     then
-        echo "[INFO] $0: --overlay-name not given, default to use ipdelivery filename" >&2
+        echo "[INFO] $0: --overlay-name not given, default to use ipdelivery filename" >&2 |& tee -a $LOG_FSDK
         # Get the overlay's name from the ipdelivery filename.
         NAME="$(basename "${IPDELIVERYFILE}" | cut -d. -f1)"
     else
         NAME="$OVERLAYNAME"
     fi
 
+    if [[ -d "EPREFIX/usr/portage/${NAME}-repo" ]]
+    then
+        echo "[ERROR] $0: overlay-name \"${NAME}\" already exist, use a different name" >&2 |& tee -a $LOG_FSDK
+        exit 1
+    fi
     fsdk-generate-overlay --pkgdir="EPREFIX" --ipdelivery="$IPDELIVERYFILE" --overlayname="${NAME}"
 fi
 
@@ -119,3 +132,6 @@ fi
 
 # Force update of IUSE TARGET
 rm -rf "EPREFIX/var/cache/edb/"*
+
+echo "[INFO] $0: Successfully add-overlay \"$NAME\" as a target!" |& tee -a $LOG_FSDK
+

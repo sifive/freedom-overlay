@@ -36,31 +36,51 @@ do
     esac
 done
 
+LOG_FSDK="EPREFIX/var/log/fsdk-utils.log"
+echo "[INFO] $0: dts=\"$IPDTS\" ip=\"$IPDELIVERY\" name=\"$OVERLAYNAME\", see $LOG_FSDK for more details" >&2 |& tee -a $LOG_FSDK
 if [[ "OVERLAYNAME" == "" ]]
 then
-    echo "[ERROR] $0: --overlayname argument is mandatory" >&2
+    echo "[ERROR] $0: --overlayname argument is mandatory" >&2 |& tee -a $LOG_FSDK
     help "$0"
     exit 1
 fi
 
 if [[ "$PKGDIR" == "" && ! -d "$PKGDIR" ]]
 then
-    echo "[ERROR] $0: --pkgdir argument is mandatory and must exist" >&2
+    echo "[ERROR] $0: --pkgdir argument is mandatory and must exist" >&2 |& tee -a $LOG_FSDK
     help "$0"
     exit 1
 fi
 
 if [[ "$IPDTS" == "" && "$IPDELIVERY" == "" ]]
 then
-    echo "[ERROR] $0: Must specify either --ipdevicetree or --ipdelivery argument" >&2
+    echo "[ERROR] $0: Must specify either --ipdevicetree or --ipdelivery argument" >&2 |& tee -a $LOG_FSDK
     help "$0"
     exit 1
 fi
 
 OVERLAYDIR="${PKGDIR}/usr/portage/${OVERLAYNAME}-repo"
 mkdir -p "${OVERLAYDIR}/machine/${OVERLAYNAME}/files"
+if [[ ! -d "${OVERLAYDIR}/machine/${OVERLAYNAME}/files" ]]
+then
+    echo "[ERROR] $0: failed to create ${OVERLAYDIR}/machine/${OVERLAYNAME}/files" >&2 |& tee -a $LOG_FSDK 
+    rm -rf "${OVERLAYDIR}"
+    exit 1
+fi
 mkdir -p "${OVERLAYDIR}/metadata"
+if [[ ! -d "${OVERLAYDIR}/metadata" ]]
+then
+    echo "[ERROR] $0: failed to create ${OVERLAYDIR}/metadata" >&2 |& tee -a $LOG_FSDK   
+    rm -rf "${OVERLAYDIR}"
+    exit 1
+fi
 mkdir -p "${OVERLAYDIR}/profiles"
+if [[ ! -d "${OVERLAYDIR}/profiles" ]]
+then
+    echo "[ERROR] $0: failed to create ${OVERLAYDIR}/profiles" >&2 |& tee -a $LOG_FSDK                           
+    rm -rf "${OVERLAYDIR}"
+    exit 1
+fi
 
 # Notify this overlay is not a master
 cat >"${OVERLAYDIR}/metadata/layout.conf" <<EOF
@@ -70,6 +90,12 @@ EOF
 
 # Prepare the overlay profiles
 mkdir -p "${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo"
+if [[ ! -d "${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo" ]]
+then
+    echo "[ERROR] $0: failed to create ${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo" >&2 |& tee -a $LOG_FSDK                           
+    rm -rf "${OVERLAYDIR}"
+    exit 1
+fi
 
 # Define the overlay EAPI level
 cat >"${OVERLAYDIR}/profiles/${OVERLAYNAME}-repo/eapi" <<EOF
@@ -106,18 +132,27 @@ masters = freedom-sdk
 auto-sync = false
 EOF
 
+echo "[INFO] $0: Configuring add-overlay for \"$OVERLAYNAME\" ..." |& tee -a $LOG_FSDK
+
 if [[ "$IPDTS" != "" ]]
 then
 
     if [[ ! -f "$IPDTS" ]]
     then
-	echo "[ERROR] $0: $IPDTS must be a file" >&2
+	echo "[ERROR] $0: $IPDTS must be a file" >&2 |& tee -a $LOG_FSDK
+        rm -rf "${OVERLAYDIR}"
 	help "$0"
 	exit 1
     fi
 
     # Save ipdevicetree file into overlay installation
     cp "${IPDTS}" "${OVERLAYDIR}/machine/${OVERLAYNAME}/files/${OVERLAYNAME}.dts"
+    if [[ ! -e "${OVERLAYDIR}/machine/${OVERLAYNAME}/files/${OVERLAYNAME}.dts" ]]
+    then
+        echo "[ERROR] $0: failed to copy ${IPDTS}" >&2 |& tee -a $LOG_FSDK
+        rm -rf "${OVERLAYDIR}"
+	exit 1
+    fi
 
     # Create a overlay ebuild
     cat >"${OVERLAYDIR}/machine/${OVERLAYNAME}/${OVERLAYNAME}-0.ebuild" <<EOF
@@ -173,6 +208,7 @@ masters = freedom-sdk
 auto-sync = false
 EOF
 
+    echo "[INFO] $0: Configuring add-overlay for \"$OVERLAYNAME\" via DTS file done!" |& tee -a "$LOG_FSDK"
 fi
 
 if [[ "$IPDELIVERY" != "" ]]
@@ -180,7 +216,8 @@ then
 
     if [[ ! -f "$IPDELIVERY" ]]
     then
-	echo "[ERROR] $0: $IPDELIVERY must be a file" >&2
+	echo "[ERROR] $0: $IPDELIVERY must be a file" >&2 |& tee -a $LOG_FSDK
+        rm -rf "${OVERLAYDIR}"
 	help "$0"
 	exit 1
     fi
@@ -189,6 +226,12 @@ then
 
     # Save ipdelivery tar in overlay files dir, overlay installation will unpack
     cp "${IPDELIVERY}" "${OVERLAYDIR}/machine/${OVERLAYNAME}/files"
+    if [[ $? -ne 0 ]]
+    then
+        echo "[ERROR] $0: failed to copy ${IPDELIVERY}" >&2 |& tee -a $LOG_FSDK
+        rm -rf "${OVERLAYDIR}"
+	exit 1
+    fi
 
 # Create a overlay ebuild
 cat >"${OVERLAYDIR}/machine/${OVERLAYNAME}/${OVERLAYNAME}-0.ebuild" <<EOF
@@ -243,4 +286,5 @@ src_install() {
 }
 EOF
 
+    echo "[INFO] $0: Configuring add-overlay for \"$OVERLAYNAME\" via IP file done!" |& tee -a "$LOG_FSDK"
 fi
